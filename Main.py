@@ -2,8 +2,8 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PreferencesWindow import *
 
-app = QApplication([])
 prefs = PrefsWindow(app.primaryScreen())
+# Create the menu
 
 def display_preferences():
     prefs.show()
@@ -16,22 +16,35 @@ if __name__ == '__main__':
 
     # Create the icon
     icon = QIcon("icon.png")
-
     # Create the tray
     tray = QSystemTrayIcon()
     tray.setIcon(icon)
     tray.setVisible(True)
-
-    # Create the menu
-    menu = QMenu()
-    action = QAction("Preferences...")
-    action.triggered.connect(display_preferences)
-    menu.addAction(action)
+    
+    # Add a title to the menu
+    title = QAction("Folder Cloner is running in the background")
+    title.setEnabled(False)
+    menu.addAction(title)
+    # Add a separator to the menu
+    menu.addSeparator()
+    # Add information to the menu
+    dest_tip.setEnabled(False)
+    menu.addAction(dest_tip)
+    time_tip.setEnabled(False)
+    menu.addAction(time_tip)
+    prefs.update_menu()
+    menu.addSeparator()
+    # Add a Preferences option to the menu.
+    preferences = QAction("Preferences")
+    preferences.triggered.connect(display_preferences)
+    menu.addAction(preferences)
+    preferences.setIcon(QIcon("gear.png"))
 
     # Add a Quit option to the menu.
     quit = QAction("Quit")
     quit.triggered.connect(app.quit)
     menu.addAction(quit)
+    quit.setIcon(QIcon("power.png"))
 
     # Add the menu to the tray
     tray.setContextMenu(menu)
