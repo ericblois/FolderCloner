@@ -4,15 +4,64 @@ from PyQt5.QtCore import *
 import os
 import json
 from Cloner import *
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+import time
+from typing import Callable
 
 TIMES = ["Weekly", "Daily", "Hourly", "Minutely"]
+basedir = os.path.dirname(__file__)
 
 file_icons = QFileIconProvider()
 
 app = QApplication([])
+# Create the icon
+icon = QIcon(os.path.join(basedir, "icons", "icon.png"))
+# Create the tray
+tray = QSystemTrayIcon()
+tray.setIcon(icon)
+tray.setVisible(True)
 menu = QMenu()
 dest_tip = QAction("Destination: ")
 time_tip = QAction("Time period: ")
+last_time_tip = QAction("No clones yet")
+
+def test():
+    print("test")
+
+__scheduler = BackgroundScheduler()
+last_run_time = 0
+
+def __scheduled_func(sources: list[str], dest: str):
+    clone_dirs(sources, dest)
+    global last_run_time
+    last_run_time = int(time.time())
+
+def start_scheduler(time_period: int, run_now: bool, sources: list[str], dest: str):
+    if __scheduler.running:
+        stop_scheduler()
+    global last_run
+    if run_now:
+        __scheduled_func(sources, dest)
+
+    if time_period == 0:
+        dt = datetime.now()
+        weekday = dt.weekday()
+        __scheduler.add_job(func=lambda: __scheduled_func(sources, dest), trigger="cron", day_of_week=f"{weekday}", id="test")
+    elif time_period == 1:
+        __scheduler.add_job(func=lambda: __scheduled_func(sources, dest), trigger="cron", day="1-31", id="test")
+    elif time_period == 2:
+        __scheduler.add_job(func=lambda: __scheduled_func(sources, dest), trigger="cron", hour="0-23", id="test")
+    elif time_period == 3:
+        __scheduler.add_job(func=lambda: __scheduled_func(sources, dest), trigger="cron", minute="0-59", id="test")
+    if __scheduler.running:
+        __scheduler.resume()
+    else:
+        __scheduler.start()
+
+def stop_scheduler():
+    __scheduler.pause()
+    __scheduler.remove_all_jobs()
 
 class PrefsWindow(QMainWindow):
 
@@ -24,16 +73,23 @@ class PrefsWindow(QMainWindow):
         self.left = int(screen.size().width() / 2 - self.win_width / 2)
         self.top = int(screen.size().height() / 2 - self.win_height / 2)
         try:
-            with open("prefs.json", "r") as f:
+            with open(os.path.join(basedir, "prefs.json"), "r") as f:
                 self.prefs = json.load(f)
                 f.close()
+                global last_run_time
+                last_run_time = self.prefs["last_run_time"]
         except:
             self.prefs = {
                 "dest": "",
                 "sources": [],
                 "timer_enabled": True,
-                "time_period": 2
+                "time_period": 2,
+                "last_run_time": 0
             }
+        if self.prefs["timer_enabled"] and self.prefs["dest"] != "" or len(self.prefs["sources"]) > 0:
+            start_scheduler(self.prefs["time_period"], True, self.prefs["sources"], self.prefs["dest"])
+            self.save_prefs()
+        tray.activated.connect(self.save_prefs)
         self.__init_UI()
     
     def __init_UI(self):
@@ -43,8 +99,9 @@ class PrefsWindow(QMainWindow):
         # Destination selector button
         self.dest_selector = QPushButton("Select Destination")
         self.dest_selector.clicked.connect(self.select_dest)
+        self.button_spacer = QLabel("")
         # Timer enable button
-        self.timer_enable = QCheckBox("Automatically clone files")
+        self.timer_enable = QCheckBox("Scheduled clones")
         self.timer_enable.setChecked(self.prefs["timer_enabled"])
         self.timer_enable.stateChanged.connect(self.__timer_enable_changed)
         # Time period selector buttons
@@ -64,6 +121,7 @@ class PrefsWindow(QMainWindow):
         # Create the buttons layout
         self.buttons_layout = QVBoxLayout()
         self.buttons_layout.addWidget(self.dest_selector)
+        self.buttons_layout.addWidget(self.button_spacer)
         self.buttons_layout.addWidget(self.timer_enable)
         for button in self.time_buttons:
             self.buttons_layout.addWidget(button)
@@ -84,18 +142,14 @@ class PrefsWindow(QMainWindow):
             # Disable selection
             self.dest_label.item(0).setFlags(Qt.ItemIsEnabled)
         h = self.dest_label.sizeHintForRow(0)
-        self.dest_label.setFixedHeight(int(h*1.1))
+        self.dest_label.setFixedHeight(int(h*1.2))
         self.sources_label = QLabel("Sources:")
         # Source labels
         self.source_list = QListWidget()
-        #self.source_model = QStandardItemModel()
-        #self.source_list.setModel(self.source_model)
         for source in self.prefs["sources"]:
             item = QListWidgetItem(source)
             item.setIcon(file_icons.icon(QFileInfo(source)))
             self.source_list.addItem(item)
-            #item = QStandardItem(source)
-            #self.source_model.appendRow(item)
         # Overlay add button
         self.source_add = QPushButton("+", self.source_list)
         self.source_add.clicked.connect(self.add_sources)
@@ -128,10 +182,16 @@ class PrefsWindow(QMainWindow):
         self.prefs["timer_enabled"] = state == Qt.Checked
         for button in self.time_buttons:
             button.setEnabled(state == Qt.Checked)
+        if state == Qt.Checked and self.prefs["dest"] != "" or len(self.prefs["sources"]) > 0:
+            start_scheduler(self.prefs["time_period"], True, self.prefs["sources"], self.prefs["dest"])
+        else:
+            stop_scheduler()
         self.save_prefs()
 
     def __time_period_changed(self, button: QRadioButton):
         self.prefs["time_period"] = self.time_period.id(button)
+        if self.prefs["timer_enabled"] and self.prefs["dest"] != "" or len(self.prefs["sources"]) > 0:
+            start_scheduler(self.prefs["time_period"], True, self.prefs["sources"], self.prefs["dest"])
         self.save_prefs()
 
     def __move_source_buttons(self, event: QResizeEvent):
@@ -151,9 +211,9 @@ class PrefsWindow(QMainWindow):
             else:
                 self.source_remove.setEnabled(True)
 
-
     def save_prefs(self):
-        with open("prefs.json", "w") as f:
+        with open(os.path.join(basedir, "prefs.json"), "w") as f:
+            self.prefs["last_run_time"] = last_run_time
             json.dump(self.prefs, f)
             f.close()
             self.update_menu()
@@ -161,7 +221,6 @@ class PrefsWindow(QMainWindow):
     def select_dest(self):
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.DirectoryOnly)
-        # os.path.expanduser('~')
         file_dialog.setDirectory(os.path.expanduser('~'))
         file_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
         file_view = file_dialog.findChild(QListView, 'listView')
@@ -225,11 +284,22 @@ class PrefsWindow(QMainWindow):
             dest_tip.setIcon(QIcon())
         else:
             dest_tip.setText("Destination: " + self.limit_string(self.prefs["dest"], 40))
-            dest_tip.setIcon(QIcon(file_icons.icon(QFileInfo(self.prefs["dest"]))))
-        time_tip.setText("Time period: " + TIMES[self.prefs["time_period"]])
+            dest_tip.setIcon(file_icons.icon(QFileInfo(self.prefs["dest"])))
+        if self.prefs["timer_enabled"]:
+            time_tip.setText("Scheduled clones: " + TIMES[self.prefs["time_period"]])
+        else:
+            time_tip.setText("Scheduled clones disabled")
+        if self.prefs["last_run_time"] == 0:
+            last_time_tip.setText("No clones yet")
+        else:
+            last_time_tip.setText("Last clone: " + time.strftime("%l:%M %p, %b %d, %Y", time.localtime(self.prefs["last_run_time"])))
     
     def run_clone(self):
         if self.prefs["dest"] == "" or len(self.prefs["sources"]) == 0:
             return
         clone_dirs(self.prefs["sources"], self.prefs["dest"])
+        global last_run_time
+        last_run_time = int(time.time())
+        self.save_prefs()
 
+prefs = PrefsWindow(app.primaryScreen())

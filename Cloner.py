@@ -238,9 +238,10 @@ def clone_dirs(src_dirs: list[str], base_dest: str):
     except Exception as e:
         print(e)
 
-if __name__ == "__main__":
+'''if __name__ == "__main__":
     # Copy the files
     clone_dirs(["/Users/ericblois/Development/Python/FantasyTools", "/Users/ericblois/Downloads"], "./cloned_dir")
 
 # "/Users/ericblois/Downloads"
 # "dir1", "dir2", "./dir3/dir4"
+'''
