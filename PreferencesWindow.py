@@ -3,6 +3,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 import os
 import json
+from Cloner import *
 
 TIMES = ["Weekly", "Daily", "Hourly", "Minutely"]
 
@@ -226,4 +227,9 @@ class PrefsWindow(QMainWindow):
             dest_tip.setText("Destination: " + self.limit_string(self.prefs["dest"], 40))
             dest_tip.setIcon(QIcon(file_icons.icon(QFileInfo(self.prefs["dest"]))))
         time_tip.setText("Time period: " + TIMES[self.prefs["time_period"]])
+    
+    def run_clone(self):
+        if self.prefs["dest"] == "" or len(self.prefs["sources"]) == 0:
+            return
+        clone_dirs(self.prefs["sources"], self.prefs["dest"])
 

@@ -34,6 +34,11 @@ if __name__ == '__main__':
     menu.addAction(time_tip)
     prefs.update_menu()
     menu.addSeparator()
+    # Add a Clone option to the menu
+    clone = QAction("Clone folders now")
+    clone.triggered.connect(prefs.run_clone)
+    menu.addAction(clone)
+    clone.setIcon(icon)
     # Add a Preferences option to the menu.
     preferences = QAction("Preferences")
     preferences.triggered.connect(display_preferences)
